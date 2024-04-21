@@ -11,14 +11,18 @@ namespace CE481_hw2
         // Section origin is left bottom corner
 
         #region
-        public LongBar(eType type, double conCover, double secHeight, double uStrain, double uStrength, double yStrain, double yStrenght)
+        public LongBar(eType type, double depth, double secHeight, double uStrain, double uStrength, double yStrain, double yStrenght)
         {
             BarType = type; UltimateStrain = uStrain; UltimateStrength = uStrength; YieldStrain = yStrain; YieldStrength = yStrenght;
 
             if (BarType == eType.TopSteel)
             {
-
+                Location = secHeight - depth;
             }
+            else if ( BarType == eType.BottomSteel)
+            {
+                Location = depth;
+            } // TODO else should give an error
 
         }
         #endregion
