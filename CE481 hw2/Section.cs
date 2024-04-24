@@ -1,9 +1,11 @@
-﻿using DevExpress.Data;
+﻿using DevExpress.CodeParser;
+using DevExpress.Data;
 using DevExpress.Mvvm.Native;
 using DevExpress.Pdf.Native.BouncyCastle.Asn1.Cms;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.RightsManagement;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms.VisualStyles;
@@ -13,7 +15,7 @@ namespace CE481_hw2
 {
     public class Section
     {
-        #region ctor
+        #region Ctor
         public Section()
         {
             SteelList = new List<LongBar>();
@@ -26,16 +28,16 @@ namespace CE481_hw2
 
         #region Private Fields
 
-        private double _Height;// H
-        private double _BaseLength;// b
-        private double _UnconfinedStrength;// fco
+        private double _Height;// H in mm
+        private double _BaseLength;// b in mm
+        private double _UnconfinedStrength;// fco in MPa
         private List<LongBar> _SteelList;
-        private double conCover;
+        private double conCover; // mm
         private bool _Confined;
         private double _ConfinementDiameter;// mm
-        private double _ConfinementYieldStrength;// Mpa
+        private double _ConfinementYieldStrength;// MPa
         private double _UltimateStrain;
-        private double _ConfinementSpacing;
+        private double _ConfinementSpacing; // mm
 
 
         
@@ -61,7 +63,7 @@ namespace CE481_hw2
 
         #endregion
 
-        #region Methods
+        #region Public Methods
 
         #region Section Properties
         public void AddSteelLayer(eVerticalLocation verticalLocation, int numOfSteel, bool differentInsideDia, double insideDia, double outsideDia, double uStrain, double uStrength, double yStrain, double yStrenght)
@@ -96,15 +98,14 @@ namespace CE481_hw2
                 ConfinementDiameter = 0;
                 ConfinementSpacing = 0;
             }
-
-
         }
 
-        public void UpdateSectionProperties(double height, double baseLength, double unconfinedStrength)
+        public void UpdateSectionProperties(double height, double baseLength, double unconfinedStrength, double conCover)
         {
             Height = height;
             BaseLength = baseLength;
             UnconfinedStrength = unconfinedStrength;
+            ConCover = conCover;
         }
 
         #endregion
@@ -174,7 +175,7 @@ namespace CE481_hw2
             double bottomSteelOutsideDia = GetBars(eVerticalLocation.BottomSteel, eHorizontalLocation.OutsideSteel)[0].Diameter;
             double AiySquared = Math.Pow(Height - 2 * conCover - 2 * ConfinementDiameter - (topSteelOutsideDia + bottomSteelOutsideDia) / 2, 2);
 
-            return AiySquared + GetAiSquared(eVerticalLocation.BottomSteel) + GetAiSquared(eVerticalLocation.TopSteel);
+            return 2 * AiySquared + GetAiSquared(eVerticalLocation.BottomSteel) + GetAiSquared(eVerticalLocation.TopSteel);
         }
 
         public double GetGamaC(bool layerIsConfined) // should be using 2 times
@@ -192,16 +193,17 @@ namespace CE481_hw2
                     longBarArea += SteelList[i].Area;
                 }
 
-                double ke = (1 - GetSumAi() / (6 * b0 * h0)) * (1 - ConfinementSpacing / (2 * b0)) * (1 - ConfinementSpacing / (2 * h0)) * (1 - longBarArea / (b0 * h0));
+                double ke = (1 - GetSumAi() / (6 * b0 * h0)) * (1 - ConfinementSpacing / (2 * b0)) * (1 - ConfinementSpacing / (2 * h0)) * Math.Pow((1 - longBarArea / (b0 * h0)), -1);
 
-                double rho = (2 * Math.PI * Math.Pow(ConfinementDiameter, 2) / 4) / (b0 * h0);// TODO Using only one stirrup. Therefore, this section has only two legs. Moreover, rhoX = rhoY = rho.
+                //double rho = (2 * Math.PI * Math.Pow(ConfinementDiameter, 2) / 4) / (b0 * h0);// TODO Using only one stirrup. Therefore, this section has only two legs. Moreover, rhoX = rhoY = rho.
+                double rho = (2 * Math.PI * Math.Pow(ConfinementDiameter, 2) / 4) / (Math.Max(b0,h0) * ConfinementSpacing);
 
-                double fex = ke * rho * UnconfinedStrength;
-                double fey = ke * rho * UnconfinedStrength;
+                double fex = ke * rho * ConfinementYieldStrength;
+                double fey = ke * rho * ConfinementYieldStrength;
 
                 double fe = (fex + fey) / 2;
 
-                result = 2.254 * Math.Sqrt(1 + 7.94 * fe / UnconfinedStrength) - 2 * fe / UnconfinedStrength;
+                result = 2.254 * Math.Sqrt(1 + 7.94 * fe / UnconfinedStrength) - 2 * fe / UnconfinedStrength -1.254;
 
             }
             else 
@@ -214,20 +216,22 @@ namespace CE481_hw2
 
         public double GetFCC(bool layerIsConfined)
         {
-            return GetGamaC(layerIsConfined) * UnconfinedStrength;
+            double result = GetGamaC(layerIsConfined) * UnconfinedStrength;
+            return result;
         }
 
         public double CalculateFC(double strainC, bool layerIsConfined)
         {
             double strainCO = 0.002;
-            double strainCC = strainCO*(1+5*(GetGamaC(layerIsConfined)-1));
+            double strainCC = strainCO * (1 + 5 * (GetGamaC(layerIsConfined) - 1));
             double x = strainC / strainCC;
 
             double Esec = GetFCC(layerIsConfined) / strainCC;
             double r = ConcreteElasticModulus / (ConcreteElasticModulus - Esec);
 
+            double result = GetFCC(layerIsConfined) * r * x / (r - 1 + Math.Pow(x, r));
 
-            return GetFCC(layerIsConfined) * r / (r - 1 + Math.Pow(x, r));
+            return result;
         }
 
         #endregion
@@ -256,18 +260,13 @@ namespace CE481_hw2
             return result;
         }
 
-        public double GetFCE()
-        {
-            return 0; // TODO 
-        }
-
         public double GetOmegaWE()
         {
             double b0 = B0;
             double h0 = H0;
             double rho = (2 * Math.PI * Math.Pow(ConfinementDiameter, 2) / 4) / (b0*ConfinementSpacing);
 
-            return GetAlpha() * rho * ConfinementYieldStrength / GetFCE();
+            return GetAlpha() * rho * ConfinementYieldStrength / UnconfinedStrength;
         }
 
         public double GetUltimateStrain()
@@ -291,8 +290,270 @@ namespace CE481_hw2
 
         #endregion
 
+        #region Section Layer Methods
+
+        public List<Layer> GetConfinedLayers(int numberOfTotalLayers)
+        {
+            if (Confined)
+            {
+                var confinedLayers = new List<Layer>();
+
+                double b0 = B0;
+                double h0 = H0 / (numberOfTotalLayers - 2);
+
+                for (int i = 0; i < numberOfTotalLayers - 2; i++)
+                {
+                    confinedLayers.Add(new Layer(i * h0 + h0 / 2 + ConfinementDiameter / 2 + ConCover, b0, h0));
+                }
+
+                return confinedLayers;
+            }
+            return new List<Layer>();
+        }
+
+        public List<Layer> GetUnconfinedLayers(int numberOfTotalLayers)
+        {
+            if (Confined)
+            {
+                var layersForConfinedSection = new List<Layer>();
+
+                // Add layers for the parts that are left in concrete cover
+
+                // For bottom layer
+                layersForConfinedSection.Add(new Layer((ConCover + ConfinementDiameter / 2) / 2, BaseLength, ConCover + ConfinementDiameter / 2));
+
+                // For middle layers                                                                                              _______________
+                double h = H0 / (numberOfTotalLayers - 2);                                                                   //  |   _________   |
+                double b = (BaseLength - B0) / 2;                                                                            //  |//|         |//|
+                for (int i = 0; i < numberOfTotalLayers - 2; i++)                                                            //  |//|         |//|
+                {                                                                                                            //  |//|         |//|
+                    layersForConfinedSection.Add(new Layer((ConCover + ConfinementDiameter / 2) + i * h + h / 2, b, h));     //  |//|         |//|
+                    // Add second layer for left and right                                                                       |//|         |//|
+                    layersForConfinedSection.Add(new Layer((ConCover + ConfinementDiameter / 2) + i * h + h / 2, b, h));     //  |//|         |//|
+                }                                                                                                            //  |//|_________|//|
+                                                                                                                             //  |_______________|
+                return layersForConfinedSection;
+            }
+            else
+            {
+                var layersForUnconfinedSection = new List<Layer>();
+
+                double b = BaseLength;
+                double h = Height/ numberOfTotalLayers;
+
+                for (int i = 0; i < numberOfTotalLayers; i++)
+                {
+                    layersForUnconfinedSection.Add(new Layer(i * h + h / 2, b, h));
+                }
+
+                return layersForUnconfinedSection;
+            }
 
 
+        }
+
+        #endregion
+
+        #region Force and Moment Methods
+
+        public double GetStrain(double location, double strainAtTop, double neutralAxis)
+        {
+            // a*location+b=GetStrain
+            // a*neutralAxis+b=0 ---> b = -a*neturalAxis
+
+            //double a = strainInput / ((Height - conCover - ConfinementDiameter / 2) - neutralAxis);
+            //double b = -a * neutralAxis;
+
+            if (location <= Height && location >= 0)
+            {
+                //double result = a * location + b;
+
+                double slope = strainAtTop / (Height - ConCover - ConfinementDiameter / 2 - neutralAxis);
+                double result = slope * (location - neutralAxis);
+
+                return result;
+            }
+            else { return 0; } // location of desired strain should be on the section
+
+
+
+        }
+        public double GetSteelForce(eVerticalLocation type, double strainAtTop, double neutralAxis)
+        {
+            var steels = GetBars(type);
+            double strain = GetStrain(steels[0].Location, strainAtTop, neutralAxis);
+            var ultimateStrain = steels[0].UltimateStrain;
+            var yieldStrength = steels[0].YieldStrength;
+            var yieldStrain = steels[0].YieldStrain;
+            var elasticModulusOfSteel = 200000; // 200GPa = 200000MPa
+
+            double totalForces = 0;
+
+            if (strain > ultimateStrain)
+            {
+                totalForces = 0;
+            }
+            else if (strain > yieldStrain)
+            {
+                for (int i = 0; i < steels.Count; i++)
+                {
+                    totalForces += yieldStrength * steels[i].Area;
+                }
+            }
+            else
+            {
+                for ( int i = 0;i < steels.Count; i++)
+                {
+                    totalForces += elasticModulusOfSteel * strain * steels[i].Area;
+                }
+            }
+
+
+            return totalForces;
+        }
+        public double GetConcreteForce(int numberOfTotalLayers, double strainAtTop, double neutralAxis)
+        {
+            var confinedLayers = GetConfinedLayers(numberOfTotalLayers);
+            var unconfinedLayers = GetUnconfinedLayers(numberOfTotalLayers);
+
+            double totalForce = 0;
+
+            for (int i = 0; i < confinedLayers.Count; i++)
+            {
+                var strain = GetStrain(confinedLayers[i].CenterOfGravity, strainAtTop, neutralAxis);
+                if (strain>0) 
+                {
+                    var fc = CalculateFC(strain, true);
+                    totalForce += fc * confinedLayers[i].Area;
+                }
+            }
+
+            for (int i = 0; i < unconfinedLayers.Count; i++)
+            {
+                var strain = GetStrain(unconfinedLayers[i].CenterOfGravity, strainAtTop, neutralAxis);
+                if (strain > 0)
+                {
+                    totalForce += CalculateFC(strain, false) * unconfinedLayers[i].Area;
+                }
+            }
+
+            return totalForce;
+        }
+        public double GetTotalForce(int numberOfTotalLayers, double strainAtTop, double neutralAxis)
+        {
+            var concreteForce = GetConcreteForce(numberOfTotalLayers, strainAtTop, neutralAxis);
+            var botSteelForce = GetSteelForce(eVerticalLocation.BottomSteel, strainAtTop, neutralAxis);
+            var topSteelFOrce = GetSteelForce(eVerticalLocation.TopSteel, strainAtTop, neutralAxis);
+
+            return concreteForce + botSteelForce + topSteelFOrce;
+        }
+        public double GetConcreteMoment(int numberOfTotalLayers, double strainAtTop, double neutralAxis)
+        {
+            // Neutral axis should already be calculated
+            var confinedLayers = GetConfinedLayers(numberOfTotalLayers);
+            var unconfinedLayers = GetUnconfinedLayers(numberOfTotalLayers);
+
+            double totalMoment = 0;
+
+            for (int i = 0; i < confinedLayers.Count; i++)
+            {
+                var strain = GetStrain(confinedLayers[i].CenterOfGravity, strainAtTop, neutralAxis);
+                if (strain > 0)
+                {
+                    var fc = CalculateFC(strain, true);
+                    totalMoment += fc * confinedLayers[i].Area * (confinedLayers[i].CenterOfGravity - neutralAxis);
+                }
+            }
+
+            for (int i = 0; i < unconfinedLayers.Count; i++)
+            {
+                var strain = GetStrain(unconfinedLayers[i].CenterOfGravity, strainAtTop, neutralAxis);
+                if (strain > 0)
+                {
+                    totalMoment += CalculateFC(strain, false) * unconfinedLayers[i].Area * (unconfinedLayers[i].CenterOfGravity - neutralAxis);
+                }
+            }
+
+            return totalMoment;
+        }
+        public double GetTotalMoment(int numberOfTotalLayers, double strainAtTop, double neutralAxis)
+        {
+            var topSteelMoment = GetSteelForce(eVerticalLocation.TopSteel, strainAtTop, neutralAxis) * (GetBars(eVerticalLocation.TopSteel)[0].Location - neutralAxis); // Neutral axis should already be calculated
+            var bottomSteelMoment = GetSteelForce(eVerticalLocation.BottomSteel, strainAtTop, neutralAxis) * (GetBars(eVerticalLocation.BottomSteel)[0].Location - neutralAxis); // Neutral axis should already be calculated
+            var concreteMoment = GetConcreteMoment(numberOfTotalLayers, strainAtTop, neutralAxis);
+
+            var result = topSteelMoment + bottomSteelMoment + concreteMoment;
+            return result;
+        }
+
+        #endregion
+
+        #region Calculation Methods
+
+        public double GetNeutralAxis(int numberOfTotalLayers,double strainAtTop)
+        {
+            double neutralAxis = Height / 2.0;
+            if (strainAtTop == 0)
+            {
+                return Height / 2;
+            }
+            else
+            {
+                double totalForce = 1;
+                double neutralAxisIncriment = Height / numberOfTotalLayers;
+
+                while (totalForce > 0)
+                {
+                    totalForce = GetTotalForce(numberOfTotalLayers, strainAtTop, neutralAxis);
+                    neutralAxis += neutralAxisIncriment;
+
+                    if (neutralAxis >= Height - conCover - ConfinementDiameter / 2) { break; }
+
+                }
+
+                return neutralAxis;
+            }
+        }
+
+        public GraphData GetStrainNeutralAxis(int numberOfTotalLayers, double StrainIncriment)
+        {
+            var strainNeutralAxis = new GraphData();
+            double ultimateStrain = GetUltimateStrain();
+            double strain = 0.0;
+
+            while (strain<ultimateStrain)
+            {
+                double neutralAxis = GetNeutralAxis(numberOfTotalLayers, strain);
+
+                strainNeutralAxis.X.Add(strain);
+                strainNeutralAxis.Y.Add(neutralAxis);
+
+                strain += StrainIncriment;
+            }
+            return strainNeutralAxis;
+        }
+
+        public GraphData GetCurvatureMomentAxis(int numberOfTotalLayers, double StrainIncriment)
+        {
+            var strainCurvatureMoment = new GraphData();
+            double ultimateStrain = GetUltimateStrain();
+            double strain = 0.0;
+
+            while (strain < ultimateStrain)
+            {
+                double neutralAxis = GetNeutralAxis(numberOfTotalLayers, strain);
+                double moment = GetTotalMoment(numberOfTotalLayers, strain,neutralAxis);
+                double curvature = strain / ((Height - conCover - ConfinementDiameter / 2) - neutralAxis);
+
+                strainCurvatureMoment.X.Add(curvature);
+                strainCurvatureMoment.Y.Add(moment);
+
+                strain += StrainIncriment;
+            }
+            return strainCurvatureMoment;
+        }
+
+        #endregion
 
         #endregion
 
