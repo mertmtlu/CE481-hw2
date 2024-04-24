@@ -11,9 +11,9 @@ namespace CE481_hw2
         // Section origin is left bottom corner
 
         #region
-        public LongBar(eVerticalLocation verticalLocation, eHorizontalLocation horizontalLocation, double depth, double secHeight, double uStrain, double uStrength, double yStrain, double yStrenght, double diameter)
+        public LongBar(eVerticalLocation verticalLocation, eHorizontalLocation horizontalLocation, double depth, double secHeight, double uStrain, double uStrength, double yStrenght, double diameter)
         {
-            VerticalLocation = verticalLocation; HorizontalLocation = horizontalLocation; UltimateStrain = uStrain; UltimateStrength = uStrength; YieldStrain = yStrain; YieldStrength = yStrenght; Diameter = diameter;
+            VerticalLocation = verticalLocation; HorizontalLocation = horizontalLocation; UltimateStrain = uStrain; UltimateStrength = uStrength; YieldStrength = yStrenght; Diameter = diameter;
 
             if (VerticalLocation == eVerticalLocation.TopSteel)
             {
@@ -33,7 +33,6 @@ namespace CE481_hw2
         private double _Location;
         private double _UltimateStrain;
         private double _UltimateStrength;
-        private double _YieldStrain;
         private double _YieldStrength;
         private double _Diameter;
 
@@ -48,7 +47,7 @@ namespace CE481_hw2
         public double UltimateStrain { get => _UltimateStrain; set => _UltimateStrain = value; }
         public double UltimateStrength { get => _UltimateStrength; set => _UltimateStrength = value; }
         public double YieldStrength { get => _YieldStrength; set => _YieldStrength = value; }
-        public double YieldStrain { get => _YieldStrain; set => _YieldStrain = value; }
+        public double YieldStrain { get => YieldStrength / 200000; }
         public double Diameter { get => _Diameter; set => _Diameter = value; }
         public double Area { get => Math.PI * Math.Pow(Diameter, 2) / 4; }
         

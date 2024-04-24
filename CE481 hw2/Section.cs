@@ -1,4 +1,5 @@
-﻿using DevExpress.CodeParser;
+﻿using DevExpress.Charts.Heatmap.Native;
+using DevExpress.CodeParser;
 using DevExpress.Data;
 using DevExpress.Mvvm.Native;
 using DevExpress.Pdf.Native.BouncyCastle.Asn1.Cms;
@@ -66,7 +67,7 @@ namespace CE481_hw2
         #region Public Methods
 
         #region Section Properties
-        public void AddSteelLayer(eVerticalLocation verticalLocation, int numOfSteel, bool differentInsideDia, double insideDia, double outsideDia, double uStrain, double uStrength, double yStrain, double yStrenght)
+        public void AddSteelLayer(eVerticalLocation verticalLocation, int numOfSteel, bool differentInsideDia, double insideDia, double outsideDia, double uStrain, double uStrength, double yStrenght)
         {
             if (differentInsideDia == false)
             {
@@ -75,11 +76,11 @@ namespace CE481_hw2
 
             for (int i = 0; i < 2; i++)
             {
-                SteelList.Add(new LongBar(verticalLocation, eHorizontalLocation.OutsideSteel, ConCover + ConfinementDiameter + outsideDia / 2, Height, uStrain, uStrength, yStrain, yStrenght, outsideDia));
+                SteelList.Add(new LongBar(verticalLocation, eHorizontalLocation.OutsideSteel, ConCover + ConfinementDiameter + outsideDia / 2, Height, uStrain, uStrength, yStrenght, outsideDia));
             }
             for (int i = 0; i < numOfSteel - 2; i++)
             {
-                SteelList.Add(new LongBar(verticalLocation, eHorizontalLocation.InsideSteel, ConCover + ConfinementDiameter + insideDia / 2, Height, uStrain, uStrength, yStrain, yStrenght, insideDia));
+                SteelList.Add(new LongBar(verticalLocation, eHorizontalLocation.InsideSteel, ConCover + ConfinementDiameter + insideDia / 2, Height, uStrain, uStrength, yStrenght, insideDia));
             }
         }
 
@@ -196,10 +197,11 @@ namespace CE481_hw2
                 double ke = (1 - GetSumAi() / (6 * b0 * h0)) * (1 - ConfinementSpacing / (2 * b0)) * (1 - ConfinementSpacing / (2 * h0)) * Math.Pow((1 - longBarArea / (b0 * h0)), -1);
 
                 //double rho = (2 * Math.PI * Math.Pow(ConfinementDiameter, 2) / 4) / (b0 * h0);// TODO Using only one stirrup. Therefore, this section has only two legs. Moreover, rhoX = rhoY = rho.
-                double rho = (2 * Math.PI * Math.Pow(ConfinementDiameter, 2) / 4) / (Math.Max(b0,h0) * ConfinementSpacing);
+                double rhoX = (2 * Math.PI * Math.Pow(ConfinementDiameter, 2) / 4) / (h0 * ConfinementSpacing);
+                double rhoY = (2 * Math.PI * Math.Pow(ConfinementDiameter, 2) / 4) / (b0 * ConfinementSpacing);
 
-                double fex = ke * rho * ConfinementYieldStrength;
-                double fey = ke * rho * ConfinementYieldStrength;
+                double fex = ke * rhoX * ConfinementYieldStrength;
+                double fey = ke * rhoY * ConfinementYieldStrength;
 
                 double fe = (fex + fey) / 2;
 
@@ -264,7 +266,7 @@ namespace CE481_hw2
         {
             double b0 = B0;
             double h0 = H0;
-            double rho = (2 * Math.PI * Math.Pow(ConfinementDiameter, 2) / 4) / (b0*ConfinementSpacing);
+            double rho = (2 * Math.PI * Math.Pow(ConfinementDiameter, 2) / 4) / (Math.Max(b0, h0) * ConfinementSpacing);
 
             return GetAlpha() * rho * ConfinementYieldStrength / UnconfinedStrength;
         }
@@ -311,7 +313,7 @@ namespace CE481_hw2
             return new List<Layer>();
         }
 
-        public List<Layer> GetUnconfinedLayers(int numberOfTotalLayers)
+        protected List<Layer> GetUnconfinedLayers(int numberOfTotalLayers)
         {
             if (Confined)
             {
@@ -319,8 +321,18 @@ namespace CE481_hw2
 
                 // Add layers for the parts that are left in concrete cover
 
-                // For bottom layer
-                layersForConfinedSection.Add(new Layer((ConCover + ConfinementDiameter / 2) / 2, BaseLength, ConCover + ConfinementDiameter / 2));
+                // For top layer
+                //layersForConfinedSection.Add(new Layer((ConCover + ConfinementDiameter / 2) / 2, BaseLength, ConCover + ConfinementDiameter / 2));
+                double datum = Height - conCover - ConfinementDiameter / 2;
+
+                double hTop = (Height - datum) / 50;
+                double bTop = BaseLength;
+
+                for (int i = 0; i < 50; i++)
+                {
+                    layersForConfinedSection.Add(new Layer(datum + i * hTop + hTop / 2, bTop, hTop));
+                }
+
 
                 // For middle layers                                                                                              _______________
                 double h = H0 / (numberOfTotalLayers - 2);                                                                   //  |   _________   |
@@ -367,8 +379,8 @@ namespace CE481_hw2
             if (location <= Height && location >= 0)
             {
                 //double result = a * location + b;
-
-                double slope = strainAtTop / (Height - ConCover - ConfinementDiameter / 2 - neutralAxis);
+                //- ConCover - ConfinementDiameter / 2
+                double slope = strainAtTop / (Height - neutralAxis);
                 double result = slope * (location - neutralAxis);
 
                 return result;
@@ -397,7 +409,14 @@ namespace CE481_hw2
             {
                 for (int i = 0; i < steels.Count; i++)
                 {
-                    totalForces += yieldStrength * steels[i].Area;
+                    if (strain < 0)
+                    {
+                        totalForces -= yieldStrength * steels[i].Area;
+                    }
+                    else
+                    {
+                        totalForces += yieldStrength * steels[i].Area;
+                    }
                 }
             }
             else
@@ -421,7 +440,7 @@ namespace CE481_hw2
             for (int i = 0; i < confinedLayers.Count; i++)
             {
                 var strain = GetStrain(confinedLayers[i].CenterOfGravity, strainAtTop, neutralAxis);
-                if (strain>0) 
+                if (strain > 0) 
                 {
                     var fc = CalculateFC(strain, true);
                     totalForce += fc * confinedLayers[i].Area;
@@ -510,7 +529,6 @@ namespace CE481_hw2
                     if (neutralAxis >= Height - conCover - ConfinementDiameter / 2) { break; }
 
                 }
-
                 return neutralAxis;
             }
         }
@@ -543,7 +561,7 @@ namespace CE481_hw2
             {
                 double neutralAxis = GetNeutralAxis(numberOfTotalLayers, strain);
                 double moment = GetTotalMoment(numberOfTotalLayers, strain,neutralAxis);
-                double curvature = strain / ((Height - conCover - ConfinementDiameter / 2) - neutralAxis);
+                double curvature = strain / (Height  - neutralAxis);
 
                 strainCurvatureMoment.X.Add(curvature);
                 strainCurvatureMoment.Y.Add(moment);
