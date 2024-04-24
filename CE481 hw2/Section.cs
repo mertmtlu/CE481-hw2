@@ -389,11 +389,11 @@ namespace CE481_hw2
 
             double totalForces = 0;
 
-            if (strain > ultimateStrain)
+            if (Math.Abs(strain) > ultimateStrain)
             {
                 totalForces = 0;
             }
-            else if (strain > yieldStrain)
+            else if (Math.Abs(strain) > yieldStrain)
             {
                 for (int i = 0; i < steels.Count; i++)
                 {
